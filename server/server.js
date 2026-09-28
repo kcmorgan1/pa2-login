@@ -5,7 +5,6 @@ const { MongoClient } = require("mongodb");
 
 const app = express();
 
-// MIDDLEWARE MUST BE FIRST
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
@@ -24,10 +23,7 @@ async function connectDatabase() {
 }
 connectDatabase();
 
-// SIGNUP ROUTE
 app.post("/signup", async (req, res) => {
-    console.log("FRONTEND SENT:", req.body); // This will trap the error!
-
     try {
         const { f_name, l_name, username, password } = req.body;
 
@@ -36,7 +32,8 @@ app.post("/signup", async (req, res) => {
         }
 
         const existingUser = await users.findOne({ username: username });
-        if (existingUser !== null) {
+
+        if (existingUser) {
             return res.status(409).json({ message: "Username already exists." });
         }
 
@@ -49,18 +46,24 @@ app.post("/signup", async (req, res) => {
     }
 });
 
-// LOGIN ROUTE
 app.post("/login", async (req, res) => {
     try {
         const { username, password } = req.body;
-        if (!username || !password) return res.status(400).json({ message: "Required." });
+
+        if (!username || !password) {
+            return res.status(400).json({ message: "Required." });
+        }
         
         const user = await users.findOne({ username: username });
+
         if (user === null || user.password !== password) {
             return res.status(401).json({ message: "Invalid credentials." });
         }
+
         res.status(200).json({ message: "Login successful!" });
+
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: "Server error" });
     }
 });

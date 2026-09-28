@@ -43,7 +43,11 @@ function Signup() {
                 <br /><br />
                 <button type="submit">Create Account</button>
             </form>
-            {message && <p>{message}</p>}
+            {message && (
+                <p style={{ color: message.startsWith("Error") ? "#ff4d4d" : "#4ade80", fontWeight: "bold", fontSize: "1.1rem" }}>
+                    {message}
+                </p>
+            )}
         </div>
     );
 }

@@ -9,7 +9,6 @@ function Login() {
         event.preventDefault();
         
         try {
-            // Pointing to our new successful port 5001
             const response = await fetch("http://localhost:5001/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -38,7 +37,11 @@ function Login() {
                 <br /><br />
                 <button type="submit">Log In</button>
             </form>
-            {message && <p>{message}</p>}
+            {message && (
+                <p style={{ color: message.startsWith("Error") ? "#ff4d4d" : "#4ade80", fontWeight: "bold", fontSize: "1.1rem" }}>
+                    {message}
+                </p>
+            )}
         </div>
     );
 }
