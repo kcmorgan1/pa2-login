@@ -12,6 +12,7 @@ const client = new MongoClient(process.env.MONGO_URI);
 let users; 
 let projects;
 let projectMemberships;
+let userStories;
 
 async function connectDatabase() {
     try {
@@ -20,6 +21,7 @@ async function connectDatabase() {
         users = db.collection("users");
         projects = db.collection("projects");
         projectMemberships = db.collection("projectMemberships");
+        userStories = db.collection("UserStories");
     } catch (error) {
         console.error("Could not connect to MongoDB", error);
     }
@@ -142,15 +144,135 @@ app.delete("/projects/:projectId/members/:userId", async (req, res) => {
     try {
         const projectId = new ObjectId(req.params.projectId);
         const userId = new ObjectId(req.params.userId);
+        
         const project = await projects.findOne({ _id: projectId });
         if (!project) return res.status(404).json({ error: "Project not found." });
+        
         if (project.project_lead_id.toString() === userId.toString()) {
             return res.status(403).json({ error: "Cannot remove the Project Lead." });
         }
+
+        const assignedStories = await userStories.find({
+            project_id: projectId,
+            assigned_user_id: userId
+        }).toArray();
+
+        if (assignedStories.length > 0) {
+            return res.status(400).json({ 
+                error: "Cannot remove member. Stories must first be reassigned, unassigned, or deleted." 
+            });
+        }
+
         await projectMemberships.deleteOne({ project_id: projectId, user_id: userId });
         res.status(200).json({ message: "Member removed" });
     } catch (error) {
         res.status(500).json({ error: "Server error" });
+    }
+});
+
+app.post("/projects/:projectId/stories", async (req, res) => {
+    try {
+        const { title, description, priority, assigned_user_id } = req.body;
+        const projectId = new ObjectId(req.params.projectId);
+
+        if (!title || !description || !priority) {
+            return res.status(400).json({ error: "Missing required fields" });
+        }
+
+        let assignedUserIdObj = null;
+        if (assigned_user_id) {
+            assignedUserIdObj = new ObjectId(assigned_user_id);
+            const membership = await projectMemberships.findOne({
+                project_id: projectId,
+                user_id: assignedUserIdObj
+            });
+            if (!membership) {
+                return res.status(400).json({ error: "Assigned user is not a project member" });
+            }
+        }
+
+        const newStory = {
+            project_id: projectId,
+            title,
+            description,
+            priority,
+            status: "To Do",
+            assigned_user_id: assignedUserIdObj
+        };
+
+        const result = await userStories.insertOne(newStory);
+        res.status(201).json({ _id: result.insertedId, ...newStory });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get("/projects/:projectId/stories", async (req, res) => {
+    try {
+        const projectId = new ObjectId(req.params.projectId);
+        const stories = await userStories.find({ project_id: projectId }).toArray();
+
+        for (let story of stories) {
+            if (story.assigned_user_id) {
+                const user = await users.findOne(
+                    { _id: story.assigned_user_id },
+                    { projection: { username: 1, f_name: 1, l_name: 1 } }
+                );
+                story.assigned_user_id = user;
+            }
+        }
+        res.status(200).json(stories);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put("/stories/:storyId", async (req, res) => {
+    try {
+        const storyId = new ObjectId(req.params.storyId);
+        const { title, description, priority, status, assigned_user_id } = req.body;
+
+        const existingStory = await userStories.findOne({ _id: storyId });
+        if (!existingStory) {
+            return res.status(404).json({ error: "Story not found" });
+        }
+
+        let assignedUserIdObj = null;
+        if (assigned_user_id) {
+            assignedUserIdObj = new ObjectId(assigned_user_id);
+            const membership = await projectMemberships.findOne({
+                project_id: existingStory.project_id,
+                user_id: assignedUserIdObj
+            });
+            if (!membership) {
+                return res.status(400).json({ error: "Assigned user is not a project member" });
+            }
+        }
+
+        const updateDoc = {
+            $set: {
+                title: title || existingStory.title,
+                description: description || existingStory.description,
+                priority: priority || existingStory.priority,
+                status: status || existingStory.status,
+                assigned_user_id: assigned_user_id ? assignedUserIdObj : null
+            }
+        };
+
+        await userStories.updateOne({ _id: storyId }, updateDoc);
+        res.status(200).json({ message: "Story updated" });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete("/stories/:storyId", async (req, res) => {
+    try {
+        const storyId = new ObjectId(req.params.storyId);
+        await userStories.deleteOne({ _id: storyId });
+        res.status(200).json({ message: "Story deleted" });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
